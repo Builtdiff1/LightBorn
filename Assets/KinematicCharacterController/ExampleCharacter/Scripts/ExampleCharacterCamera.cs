@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace KinematicCharacterController.Examples
 {
@@ -38,6 +39,9 @@ namespace KinematicCharacterController.Examples
         public float ObstructionSharpness = 10000f;
         public List<Collider> IgnoredColliders = new List<Collider>();
 
+        [Header("Input")]
+        public InputActionReference LookAction; // Assign the input action here
+
         public Transform Transform { get; private set; }
         public Transform FollowTransform { get; private set; }
 
@@ -71,6 +75,20 @@ namespace KinematicCharacterController.Examples
             _targetVerticalAngle = 0f;
 
             PlanarDirection = Vector3.forward;
+
+            // Enable the Look action if assigned
+            if (LookAction != null)
+            {
+                LookAction.action.Enable();
+            }
+        }
+
+        void OnDestroy()
+        {
+            if (LookAction != null)
+            {
+                LookAction.action.Disable();
+            }
         }
 
         // Set the transform that the camera will orbit around
@@ -79,6 +97,19 @@ namespace KinematicCharacterController.Examples
             FollowTransform = t;
             PlanarDirection = FollowTransform.forward;
             _currentFollowPosition = FollowTransform.position;
+        }
+
+        void Update()
+        {
+            Vector2 lookInput = Vector2.zero;
+
+            if (LookAction != null)
+            {
+                lookInput = LookAction.action.ReadValue<Vector2>();
+            }
+
+            // Call update with the look input converted to Vector3
+            UpdateWithInput(Time.deltaTime, 0f, new Vector3(lookInput.x, lookInput.y, 0f));
         }
 
         public void UpdateWithInput(float deltaTime, float zoomInput, Vector3 rotationInput)
@@ -135,14 +166,6 @@ namespace KinematicCharacterController.Examples
                                 break;
                             }
                         }
-                        for (int j = 0; j < IgnoredColliders.Count; j++)
-                        {
-                            if (IgnoredColliders[j] == _obstructions[i].collider)
-                            {
-                                isIgnored = true;
-                                break;
-                            }
-                        }
 
                         if (!isIgnored && _obstructions[i].distance < closestHit.distance && _obstructions[i].distance > 0)
                         {
@@ -150,7 +173,7 @@ namespace KinematicCharacterController.Examples
                         }
                     }
 
-                    // If obstructions detecter
+                    // If obstructions detected
                     if (closestHit.distance < Mathf.Infinity)
                     {
                         _distanceIsObstructed = true;

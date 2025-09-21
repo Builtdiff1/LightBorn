@@ -8,10 +8,12 @@ public class MazeDifficultyAI : MonoBehaviour
     public int beaconCount = 3;
     public float minDistanceFromExit = 0.3f; 
     public float minDistanceBetweenBeacons = 0.2f; 
+    public int beaconExtensionLengthMin = 3;
+    public int beaconExtensionLengthMax = 7;
 
     [Header("Difficulty Settings")]
     [Range(0f, 1f)]
-    public float wallRemovalChance = 0.1f;
+    public float wallRemovalChance = 0.05f;
 
     [Header("Dungeon Settings")]
     public List<GameObject> dungeonPrefabs;
@@ -24,10 +26,13 @@ public class MazeDifficultyAI : MonoBehaviour
     [Header("Structure Settings")]
     public List<GameObject> structurePrefabs;
     public int structureCount = 2;
-    public Vector2Int structureSize = new Vector2Int(3, 3); // reserved size in maze cells
+    public Vector2Int structureSize = new Vector2Int(3, 3); 
 
-    public void AdjustMaze(int[,] maze, int width, int height, float cellSize)
+    private System.Random rng;
+
+    public void AdjustMaze(int[,] maze, int width, int height, float cellSize, System.Random rngInput)
     {
+        rng = rngInput;
         AdjustWalls(maze, width, height);
         PlaceBeacons(maze, width, height, cellSize);
         PlaceDungeons(maze, width, height, cellSize);
@@ -49,10 +54,8 @@ public class MazeDifficultyAI : MonoBehaviour
                     if (maze[x, y + 1] == 0) openCount++;
                     if (maze[x, y - 1] == 0) openCount++;
 
-                    if (openCount <= 1 && Random.value < wallRemovalChance)
-                    {
+                    if (openCount <= 1 && rng.NextDouble() < wallRemovalChance)
                         maze[x, y] = 0;
-                    }
                 }
             }
         }
@@ -62,27 +65,32 @@ public class MazeDifficultyAI : MonoBehaviour
     {
         if (beaconPrefab == null || beaconCount <= 0) return;
 
+        Vector2Int playerStart = new Vector2Int(width / 2, height / 2);
+        Vector2Int exitPos = FindExit(maze, width, height);
         List<Vector2Int> deadEnds = FindDeadEnds(maze, width, height);
         List<Vector2Int> placedBeacons = new List<Vector2Int>();
-        Vector2Int exitPos = FindExit(maze, width, height);
 
-        for (int i = 0; i < beaconCount; i++)
+        // Sort dead ends by “path length to nearest junction” descending
+        deadEnds.Sort((a, b) => ScoreDeadEnd(maze, a).CompareTo(ScoreDeadEnd(maze, b)));
+        deadEnds.Reverse();
+
+        for (int i = 0; i < beaconCount && deadEnds.Count > 0; i++)
         {
             Vector2Int chosen = Vector2Int.zero;
             int tries = 0;
 
-            while (tries < 100)
+            while (tries < deadEnds.Count)
             {
-                if (deadEnds.Count == 0) break;
+                chosen = deadEnds[tries];
+                tries++;
 
-                chosen = deadEnds[Random.Range(0, deadEnds.Count)];
-
+                // Far from exit & player
                 if (Vector2Int.Distance(chosen, exitPos) < Mathf.Max(width, height) * minDistanceFromExit)
-                {
-                    tries++;
                     continue;
-                }
+                if (Vector2Int.Distance(chosen, playerStart) < Mathf.Max(width, height) * minDistanceFromExit)
+                    continue;
 
+                // Far from other beacons
                 bool tooClose = false;
                 foreach (var b in placedBeacons)
                 {
@@ -92,22 +100,73 @@ public class MazeDifficultyAI : MonoBehaviour
                         break;
                     }
                 }
-
-                if (tooClose)
-                {
-                    tries++;
-                    continue;
-                }
+                if (tooClose) continue;
 
                 break;
             }
 
-            placedBeacons.Add(chosen);
-            Vector3 pos = new Vector3(chosen.x * cellSize, 0, chosen.y * cellSize);
+            if (chosen == Vector2Int.zero) continue;
+
+            // Optional: create mini-corridor to hide beacon
+            Vector2Int beaconPos = ExtendDeadEnd(maze, chosen);
+
+            placedBeacons.Add(beaconPos);
+            Vector3 pos = new Vector3(beaconPos.x * cellSize, 0, beaconPos.y * cellSize);
             Instantiate(beaconPrefab, pos, Quaternion.identity, transform);
         }
     }
 
+    int ScoreDeadEnd(int[,] maze, Vector2Int pos)
+    {
+        int distance = 0;
+        Vector2Int current = pos;
+
+        while (true)
+        {
+            int paths = 0;
+            if (maze[current.x + 1, current.y] == 0) paths++;
+            if (maze[current.x - 1, current.y] == 0) paths++;
+            if (maze[current.x, current.y + 1] == 0) paths++;
+            if (maze[current.x, current.y - 1] == 0) paths++;
+
+            if (paths != 1) break; // reached junction
+            distance++;
+
+            // Move to next open neighbor
+            if (maze[current.x + 1, current.y] == 0) current.x++;
+            else if (maze[current.x - 1, current.y] == 0) current.x--;
+            else if (maze[current.x, current.y + 1] == 0) current.y++;
+            else if (maze[current.x, current.y - 1] == 0) current.y--;
+        }
+
+        return distance;
+    }
+
+    Vector2Int ExtendDeadEnd(int[,] maze, Vector2Int start)
+    {
+        Vector2Int current = start;
+        int length = rng.Next(beaconExtensionLengthMin, beaconExtensionLengthMax + 1);
+
+        for (int i = 0; i < length; i++)
+        {
+            List<Vector2Int> neighbors = new List<Vector2Int>();
+
+            if (maze[current.x + 1, current.y] == 1) neighbors.Add(new Vector2Int(current.x + 1, current.y));
+            if (maze[current.x - 1, current.y] == 1) neighbors.Add(new Vector2Int(current.x - 1, current.y));
+            if (maze[current.x, current.y + 1] == 1) neighbors.Add(new Vector2Int(current.x, current.y + 1));
+            if (maze[current.x, current.y - 1] == 1) neighbors.Add(new Vector2Int(current.x, current.y - 1));
+
+            if (neighbors.Count == 0) break;
+
+            Vector2Int next = neighbors[rng.Next(neighbors.Count)];
+            maze[next.x, next.y] = 0; // carve path
+            current = next;
+        }
+
+        return current;
+    }
+
+    // --- Dungeons, Dens, Structures remain the same ---
     void PlaceDungeons(int[,] maze, int width, int height, float cellSize)
     {
         if (dungeonPrefabs.Count == 0 || dungeonCount <= 0) return;
@@ -117,11 +176,11 @@ public class MazeDifficultyAI : MonoBehaviour
             Vector2Int pos = FindWallWithPath(maze, width, height);
             if (pos == Vector2Int.zero) continue;
 
-            GameObject dungeonPrefab = dungeonPrefabs[Random.Range(0, dungeonPrefabs.Count)];
+            GameObject dungeonPrefab = dungeonPrefabs[rng.Next(dungeonPrefabs.Count)];
             Vector3 spawnPos = new Vector3(pos.x * cellSize, 0, pos.y * cellSize);
             Instantiate(dungeonPrefab, spawnPos, Quaternion.identity, transform);
 
-            maze[pos.x, pos.y] = 0; // carve entrance
+            maze[pos.x, pos.y] = 0;
         }
     }
 
@@ -134,11 +193,11 @@ public class MazeDifficultyAI : MonoBehaviour
             Vector2Int pos = FindWallWithPath(maze, width, height);
             if (pos == Vector2Int.zero) continue;
 
-            GameObject denPrefab = denPrefabs[Random.Range(0, denPrefabs.Count)];
+            GameObject denPrefab = denPrefabs[rng.Next(denPrefabs.Count)];
             Vector3 spawnPos = new Vector3(pos.x * cellSize, 0, pos.y * cellSize);
             Instantiate(denPrefab, spawnPos, Quaternion.identity, transform);
 
-            maze[pos.x, pos.y] = 0; // carve entrance
+            maze[pos.x, pos.y] = 0;
         }
     }
 
@@ -151,23 +210,14 @@ public class MazeDifficultyAI : MonoBehaviour
             Vector2Int pos = FindOpenArea(maze, width, height, structureSize);
             if (pos == Vector2Int.zero) continue;
 
-            GameObject structurePrefab = structurePrefabs[Random.Range(0, structurePrefabs.Count)];
+            GameObject structurePrefab = structurePrefabs[rng.Next(structurePrefabs.Count)];
             Vector3 spawnPos = new Vector3(pos.x * cellSize, 0, pos.y * cellSize);
             Instantiate(structurePrefab, spawnPos, Quaternion.identity, transform);
 
-            // clear reserved space
             for (int x = 0; x < structureSize.x; x++)
-            {
                 for (int y = 0; y < structureSize.y; y++)
-                {
-                    int gx = pos.x + x;
-                    int gy = pos.y + y;
-                    if (gx < width && gy < height)
-                    {
-                        maze[gx, gy] = 0;
-                    }
-                }
-            }
+                    if (pos.x + x < width && pos.y + y < height)
+                        maze[pos.x + x, pos.y + y] = 0;
         }
     }
 
@@ -175,9 +225,7 @@ public class MazeDifficultyAI : MonoBehaviour
     {
         List<Vector2Int> deadEnds = new List<Vector2Int>();
         for (int x = 1; x < width - 1; x++)
-        {
             for (int y = 1; y < height - 1; y++)
-            {
                 if (maze[x, y] == 0)
                 {
                     int walls = 0;
@@ -188,8 +236,6 @@ public class MazeDifficultyAI : MonoBehaviour
 
                     if (walls >= 3) deadEnds.Add(new Vector2Int(x, y));
                 }
-            }
-        }
         return deadEnds;
     }
 
@@ -212,16 +258,11 @@ public class MazeDifficultyAI : MonoBehaviour
     {
         for (int tries = 0; tries < 100; tries++)
         {
-            int x = Random.Range(1, width - 1);
-            int y = Random.Range(1, height - 1);
+            int x = rng.Next(1, width - 1);
+            int y = rng.Next(1, height - 1);
 
-            if (maze[x, y] == 1)
-            {
-                if (maze[x + 1, y] == 0 || maze[x - 1, y] == 0 || maze[x, y + 1] == 0 || maze[x, y - 1] == 0)
-                {
-                    return new Vector2Int(x, y);
-                }
-            }
+            if (maze[x, y] == 1 && (maze[x + 1, y] == 0 || maze[x - 1, y] == 0 || maze[x, y + 1] == 0 || maze[x, y - 1] == 0))
+                return new Vector2Int(x, y);
         }
         return Vector2Int.zero;
     }
@@ -230,22 +271,13 @@ public class MazeDifficultyAI : MonoBehaviour
     {
         for (int tries = 0; tries < 200; tries++)
         {
-            int x = Random.Range(1, width - size.x - 1);
-            int y = Random.Range(1, height - size.y - 1);
+            int x = rng.Next(1, width - size.x - 1);
+            int y = rng.Next(1, height - size.y - 1);
 
             bool fits = true;
             for (int dx = 0; dx < size.x; dx++)
-            {
                 for (int dy = 0; dy < size.y; dy++)
-                {
-                    if (maze[x + dx, y + dy] != 0)
-                    {
-                        fits = false;
-                        break;
-                    }
-                }
-                if (!fits) break;
-            }
+                    if (maze[x + dx, y + dy] != 0) fits = false;
 
             if (fits) return new Vector2Int(x, y);
         }

@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 5324169120732607122}
   - component: {fileID: 2564164704852034162}
   - component: {fileID: 8827951679802673383}
+  - component: {fileID: 4231739824815608745}
   m_Layer: 0
   m_Name: Beacon
   m_TagString: Untagged
@@ -111,3 +112,25 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &4231739824815608745
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2678642477863742936}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d23d746b1609da3468a5390273a4e32e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Beacon
+  detectionRange: 5
+  playerLayer:
+    serializedVersion: 2
+    m_Bits: 8
+  canvasPrefab: {fileID: 715338110890924436, guid: 6aa264e55fcbd944fae048b47961eefa, type: 3}
+  sliderPrefab: {fileID: 8133851899411506265, guid: a78d198487cdc7346a88886c67188fc0, type: 3}
+  minFillTime: 7
+  maxFillTime: 12
+  beaconDefaultColor: {r: 1, g: 1, b: 1, a: 1}
+  beaconCompleteColor: {r: 0, g: 1, b: 0, a: 1}

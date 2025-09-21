@@ -13,25 +13,27 @@ MonoBehaviour:
   m_Name: QuickAccessManager
   m_EditorClassIdentifier: CustomToolbar::OpalStudio.CustomToolbar.Editor.ToolbarElements.QuickAccess.Data.QuickAccessManager
   items:
-  - displayName: MazeManager
-    scenePath: Assets/KinematicCharacterController/Examples/Scenes/CharacterPlayground.unity
-  - displayName: Player(Clone)
-    scenePath: Assets/KinematicCharacterController/Examples/Scenes/CharacterPlayground.unity
-  - displayName: MazeManager
-    scenePath: Assets/KinematicCharacterController/Examples/Scenes/CharacterPlayground.unity
-  - displayName: Spawn
+  - displayName: MazeUIManager
+    scenePath: 
+  - displayName: Scripts
     scenePath: 
   - displayName: MazeManager
     scenePath: Assets/KinematicCharacterController/Examples/Scenes/CharacterPlayground.unity
-  - displayName: Spawn
+  - displayName: EventSystem
+    scenePath: Assets/KinematicCharacterController/Examples/Scenes/CharacterPlayground.unity
+  - displayName: Walls
     scenePath: 
-  - displayName: Test
-    scenePath: Assets/Prefabs/Test.prefab
-  - displayName: Test
-    scenePath: Assets/Prefabs/Test.prefab
-  - displayName: Test(Clone)
-    scenePath: Assets/KinematicCharacterController/Examples/Scenes/CharacterPlayground.unity
-  - displayName: MazeManager
-    scenePath: Assets/KinematicCharacterController/Examples/Scenes/CharacterPlayground.unity
-  - displayName: Test
-    scenePath: Assets/KinematicCharacterController/Examples/Scenes/CharacterPlayground.unity
+  - displayName: Wall
+    scenePath: 
+  - displayName: Matirials
+    scenePath: 
+  - displayName: Exit
+    scenePath: 
+  - displayName: Exit Variant
+    scenePath: 
+  - displayName: InputSystem_Actions
+    scenePath: 
+  - displayName: ExampleCharacterController
+    scenePath: 
+  - displayName: PlayerOBJ
+    scenePath: Assets/Prefabs/Player.prefab

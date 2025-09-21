@@ -5,6 +5,6 @@ AssetOrigin:
   serializedVersion: 1
   productId: 327041
   packageName: CustomToolbar
-  packageVersion: 2.6.1
+  packageVersion: 2.7.0
   assetPath: Assets/OpalStudio/CustomToolbar/Editor/ToolbarElements/MissingReferences/Window/MissingReferencesWindow.cs
-  uploadId: 786586
+  uploadId: 788466

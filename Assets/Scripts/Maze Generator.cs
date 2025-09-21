@@ -4,69 +4,98 @@ using UnityEngine;
 public class MazeGenerator : MonoBehaviour
 {
     [Header("Maze Settings")]
-    public int width = 21;     // must be odd
-    public int height = 21;    // must be odd
-    public int gladeSize = 5;  // central spawn area (must be odd)
+    [Range(20, 200)]
+    public int width = 20; // manual width
+
+    [Range(20, 200)]
+    public int height = 20;
+    public int gladeSize = 5; // central spawn area (must be odd)
 
     [Header("Prefabs")]
     public GameObject wallPrefab;
-    public GameObject floorPrefab; // optimized floor tiles
+    public GameObject floorPrefab; // per-cell floor
     public GameObject exitPrefab;
     public GameObject beaconPrefab;
-    public GameObject playerPrefab; // NEW
+    public GameObject playerPrefab;
 
     [Header("Generation Settings")]
     public bool generateOnStart = true;
-    public int seed = 0; // 0 = random
-    public float cellSize = 1f;   // scale of each maze cell
-    public int beaconCount = 3;    // number of beacons
+    public string seed = "0"; // format: width-seed-height
+    public float cellSize = 1f;
+    public int beaconCount = 3;
 
     private int[,] maze;
     private Vector2Int exitPosition;
     private List<GameObject> floorInstances = new List<GameObject>();
+    private float wallHeight = 30f;
+
+    private int usedWidth;
+    private int usedHeight;
+    private int usedSeed;
 
     void Start()
     {
         if (generateOnStart)
-        {
             GenerateMaze(seed);
-        }
     }
 
-    public void GenerateMaze(int customSeed = 0)
+    public void GenerateMaze(string customSeed = null)
     {
-        if (customSeed != 0) Random.InitState(customSeed);
-        else Random.InitState(System.DateTime.Now.Millisecond);
+        string seedStr = customSeed ?? seed;
 
-        maze = new int[width, height];
+        if (seedStr == "0")
+        {
+            // New random maze using current inspector width/height
+            usedWidth = width;
+            usedHeight = height;
+            usedSeed = Random.Range(int.MinValue, int.MaxValue);
+            seed = $"{usedWidth}-{usedSeed}-{usedHeight}";
+        }
+        else
+        {
+            // Parse format: width-seed-height
+            int firstDash = seedStr.IndexOf('-');
+            int lastDash = seedStr.LastIndexOf('-');
 
-        // fill with walls
-        for (int x = 0; x < width; x++)
-            for (int y = 0; y < height; y++)
+            if (firstDash == -1 || lastDash == -1 || firstDash == lastDash)
+            {
+                Debug.LogError("Invalid seed format, using defaults.");
+                usedWidth = width;
+                usedHeight = height;
+                usedSeed = int.Parse(seedStr);
+            }
+            else
+            {
+                usedWidth = int.Parse(seedStr.Substring(0, firstDash));
+                usedSeed = int.Parse(seedStr.Substring(firstDash + 1, lastDash - firstDash - 1));
+                usedHeight = int.Parse(seedStr.Substring(lastDash + 1));
+            }
+        }
+
+        Random.InitState(usedSeed);
+
+        // Initialize maze
+        maze = new int[usedWidth, usedHeight];
+        for (int x = 0; x < usedWidth; x++)
+            for (int y = 0; y < usedHeight; y++)
                 maze[x, y] = 1;
 
-        // carve maze recursively
         Carve(1, 1);
-
-        // carve central glade
         CreateGlade();
-
-        // place exit
-        PlaceExit();
-
-        // spawn walls and floor
+        PickExitCell();
         DrawMaze();
+        SpawnExitPrefab();
 
-        // AI wall adjustments + beacon placement
+        // Apply AI deterministically
         MazeDifficultyAI ai = GetComponent<MazeDifficultyAI>();
         if (ai != null)
         {
             ai.beaconPrefab = beaconPrefab;
             ai.beaconCount = beaconCount;
-            ai.AdjustMaze(maze, width, height, cellSize);
+            System.Random rng = new System.Random(usedSeed);
+            ai.AdjustMaze(maze, usedWidth, usedHeight, cellSize, rng);
         }
 
-        // finally, spawn player in exact center of maze
         SpawnPlayer();
     }
 
@@ -89,7 +118,7 @@ public class MazeGenerator : MonoBehaviour
             int nx = x + dx * 2;
             int ny = y + dy * 2;
 
-            if (nx > 0 && nx < width - 1 && ny > 0 && ny < height - 1)
+            if (nx > 0 && nx < usedWidth - 1 && ny > 0 && ny < usedHeight - 1)
             {
                 if (maze[nx, ny] == 1)
                 {
@@ -103,110 +132,97 @@ public class MazeGenerator : MonoBehaviour
 
     void CreateGlade()
     {
-        int cx = width / 2;
-        int cy = height / 2;
+        int cx = usedWidth / 2;
+        int cy = usedHeight / 2;
         int r = gladeSize / 2;
 
         for (int x = -r; x <= r; x++)
-        {
             for (int y = -r; y <= r; y++)
-            {
-                if (cx + x > 0 && cx + x < width && cy + y > 0 && cy + y < height)
-                {
+                if (cx + x > 0 && cx + x < usedWidth && cy + y > 0 && cy + y < usedHeight)
                     maze[cx + x, cy + y] = 0;
-                }
-            }
-        }
     }
 
-    void PlaceExit()
+    void PickExitCell()
     {
         List<Vector2Int> edges = new List<Vector2Int>();
 
-        for (int x = 1; x < width - 1; x++)
+        for (int x = 1; x < usedWidth - 1; x++)
         {
             if (maze[x, 1] == 0) edges.Add(new Vector2Int(x, 0));
-            if (maze[x, height - 2] == 0) edges.Add(new Vector2Int(x, height - 1));
+            if (maze[x, usedHeight - 2] == 0) edges.Add(new Vector2Int(x, usedHeight - 1));
         }
-        for (int y = 1; y < height - 1; y++)
+        for (int y = 1; y < usedHeight - 1; y++)
         {
             if (maze[1, y] == 0) edges.Add(new Vector2Int(0, y));
-            if (maze[width - 2, y] == 0) edges.Add(new Vector2Int(width - 1, y));
+            if (maze[usedWidth - 2, y] == 0) edges.Add(new Vector2Int(usedWidth - 1, y));
         }
+
+        if (edges.Count == 0) return;
 
         exitPosition = edges[Random.Range(0, edges.Count)];
         maze[exitPosition.x, exitPosition.y] = 0;
-
-        GameObject exit = Instantiate(exitPrefab, new Vector3(exitPosition.x * cellSize, 0, exitPosition.y * cellSize), Quaternion.identity, transform);
-        exit.transform.localScale = Vector3.one * cellSize;
     }
 
     void DrawMaze()
     {
-        // clear old children
         foreach (Transform child in transform)
-        {
             Destroy(child.gameObject);
-        }
 
-        floorInstances.Clear();
+        SpawnFloorsPerCell();
 
-        // spawn optimized floor tiles
-        SpawnOptimizedFloor();
-
-        // spawn walls
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
+        for (int x = 0; x < usedWidth; x++)
+            for (int y = 0; y < usedHeight; y++)
             {
+                if (x == exitPosition.x && y == exitPosition.y) continue;
+
                 if (maze[x, y] == 1)
                 {
-                    Vector3 pos = new Vector3(x * cellSize, 0, y * cellSize);
+                    Vector3 pos = new Vector3(x * cellSize, wallHeight / 2f, y * cellSize);
                     GameObject wall = Instantiate(wallPrefab, pos, Quaternion.identity, transform);
-
-                    // scale wall correctly (height stays consistent)
-                    Vector3 scale = new Vector3(cellSize, wall.transform.localScale.y, cellSize);
-                    wall.transform.localScale = scale;
+                    wall.transform.localScale = new Vector3(cellSize, wall.transform.localScale.y, cellSize);
                 }
             }
-        }
     }
 
-    void SpawnOptimizedFloor()
+    void SpawnExitPrefab()
+    {
+        if (exitPrefab == null) return;
+
+        Vector3 pos = new Vector3(exitPosition.x * cellSize, wallHeight / 2f, exitPosition.y * cellSize);
+        GameObject exit = Instantiate(exitPrefab, pos, Quaternion.identity, transform);
+        exit.transform.localScale = new Vector3(cellSize, wallPrefab.transform.localScale.y, cellSize);
+    }
+
+    void SpawnFloorsPerCell()
     {
         if (floorPrefab == null) return;
 
-        Vector3 prefabSize = floorPrefab.GetComponent<Renderer>().bounds.size;
+        floorInstances.Clear();
 
-        int tilesX = Mathf.CeilToInt((width * cellSize) / prefabSize.x);
-        int tilesZ = Mathf.CeilToInt((height * cellSize) / prefabSize.z);
-
-        Vector3 startPos = new Vector3(prefabSize.x / 2f, 0, prefabSize.z / 2f);
-
-        for (int x = 0; x < tilesX; x++)
-        {
-            for (int z = 0; z < tilesZ; z++)
+        for (int x = 0; x < usedWidth; x++)
+            for (int y = 0; y < usedHeight; y++)
             {
-                Vector3 pos = new Vector3(x * prefabSize.x, 0, z * prefabSize.z) + startPos;
+                Vector3 pos = new Vector3(x * cellSize, 0f, y * cellSize);
                 GameObject floor = Instantiate(floorPrefab, pos, Quaternion.identity, transform);
+
+                Vector3 prefabSize = floorPrefab.GetComponent<Renderer>().bounds.size;
+                floor.transform.localScale = new Vector3(cellSize / prefabSize.x, 1f, cellSize / prefabSize.z);
+
                 floorInstances.Add(floor);
             }
-        }
     }
 
-void SpawnPlayer()
-{
-    if (playerPrefab == null) return;
+    void SpawnPlayer()
+    {
+        if (playerPrefab == null) return;
 
-    // true center of the maze
-    float spawnX = ((width - 1) / 2f) * cellSize + (cellSize / 2f);
-    float spawnZ = ((height - 1) / 2f) * cellSize + (cellSize / 2f);
-    float spawnY = 2f; // spawn slightly above floor
+        float spawnX = ((usedWidth - 1) / 2f) * cellSize + (cellSize / 2f);
+        float spawnZ = ((usedHeight - 1) / 2f) * cellSize + (cellSize / 2f);
+        float spawnY = wallHeight;
 
-    Vector3 spawnPos = new Vector3(spawnX, spawnY, spawnZ);
-    Instantiate(playerPrefab, spawnPos, Quaternion.identity);
-}
-
+        Vector3 spawnPos = new Vector3(spawnX, spawnY, spawnZ);
+        Instantiate(playerPrefab, spawnPos, Quaternion.identity);
+    }
 
     void Shuffle(int[] arr)
     {

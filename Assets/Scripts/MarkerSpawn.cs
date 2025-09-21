@@ -10,15 +10,21 @@ public class MarkerPlacement : MonoBehaviour
     [Header("Marker Settings")]
     public GameObject markerPrefab;
     public Transform player;
-    public Vector3 positionOffset = Vector3.zero;   // extra tweak if needed (e.g. Vector3.down * 0.5f)
+    public Vector3 positionOffset = Vector3.zero;
+
+    [Header("Marker Limits")]
+    public int maxMarkers = 5;
 
     [Header("Cooldown Settings")]
     public float cooldownTime = 1f;
     private float lastMarkerTime = -Mathf.Infinity;
 
+    [Header("Shrink Settings")]
+    public float shrinkSpeed = 5f;
+
     [Header("UI Elements")]
-    public GameObject readyImage;
-    public GameObject cooldownImage;
+    public GameObject readyImage;    // Active when marker is ready
+    public GameObject cooldownImage; // Active when on cooldown
 
     private readonly List<GameObject> activeMarkers = new List<GameObject>();
 
@@ -59,48 +65,66 @@ public class MarkerPlacement : MonoBehaviour
         lastMarkerTime = Time.time;
     }
 
-    // Optional: call this from other scripts/UI
-    public void TriggerMarker()
-    {
-        if (Time.time < lastMarkerTime + cooldownTime) return;
-        PlaceMarker();
-        lastMarkerTime = Time.time;
-    }
-
     private void PlaceMarker()
     {
-        if (player == null || markerPrefab == null) return;
+        if (markerPrefab == null || player == null) return;
 
-        // Spawn directly under the player
-        Vector3 spawnPosition = player.position + positionOffset;
-        Quaternion rot = Quaternion.identity; // keep flat rotation
-
-        CleanupMarkers();
-
-        GameObject newMarkerObj = Instantiate(markerPrefab, spawnPosition, rot);
-        activeMarkers.Add(newMarkerObj);
-    }
-
-    private void CleanupMarkers()
-    {
-        for (int i = activeMarkers.Count - 1; i >= 0; i--)
+        // Determine spawn position (raycast down)
+        Vector3 spawnOrigin = player.position + positionOffset;
+        Vector3 spawnPosition = spawnOrigin;
+        if (Physics.Raycast(spawnOrigin, Vector3.down, out RaycastHit hit, 100f))
         {
-            var go = activeMarkers[i];
-            if (go == null)
-            {
-                activeMarkers.RemoveAt(i);
-                continue;
-            }
+            spawnPosition = hit.point;
+        }
 
-            // If your marker script has ReduceLife(), call it without requiring it.
-            go.SendMessage("ReduceLife", SendMessageOptions.DontRequireReceiver);
+        // Camera-facing rotation
+        Vector3 camForward = Camera.main.transform.forward;
+        camForward.y = 0f;
+        camForward.Normalize();
+        Quaternion rot = Quaternion.LookRotation(camForward, Vector3.up);
+
+        // Spawn new marker
+        GameObject newMarker = Instantiate(markerPrefab, spawnPosition, rot);
+        activeMarkers.Add(newMarker);
+
+        // Set shrink speed on cylinder
+        MarkerLife newLife = newMarker.GetComponentInChildren<MarkerLife>();
+        if (newLife != null)
+        {
+            newLife.shrinkSpeed = shrinkSpeed;
+            Debug.Log($"Spawned marker: {newMarker.name} with cylinder {newLife.gameObject.name}");
+        }
+
+        // Stair-step shrink: each older marker shrinks by fixed step
+        float shrinkStep = 1f / maxMarkers;
+        int count = activeMarkers.Count;
+        for (int i = 0; i < count; i++)
+        {
+            GameObject marker = activeMarkers[i];
+            if (marker != null)
+            {
+                MarkerLife life = marker.GetComponentInChildren<MarkerLife>();
+                if (life != null)
+                {
+                    float fraction = Mathf.Clamp01(1f - shrinkStep * (count - i - 1));
+                    life.ShrinkToFraction(fraction);
+                }
+            }
+        }
+
+        // Remove oldest if exceeding max
+        if (activeMarkers.Count > maxMarkers)
+        {
+            Destroy(activeMarkers[0]);
+            activeMarkers.RemoveAt(0);
         }
     }
 
     private void UpdateCooldownUI()
     {
         bool isReady = Time.time >= lastMarkerTime + cooldownTime;
-        if (readyImage) readyImage.SetActive(isReady);
-        if (cooldownImage) cooldownImage.SetActive(!isReady);
+
+        if (readyImage != null) readyImage.SetActive(isReady);
+        if (cooldownImage != null) cooldownImage.SetActive(!isReady);
     }
 }
